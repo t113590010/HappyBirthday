@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>樂透號碼抓取測試</title>
+    <style>
+        body { font-family: '微軟正黑體', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #e9ecef; color: #343a40; text-align: center; padding: 40px; }
+        .container { background-color: #ffffff; padding: 30px; border-radius: 12px; box-shadow: 0 6px 12px rgba(0,0,0,0.15); max-width: 700px; margin: 0 auto; }
+        h1 { color: #007bff; border-bottom: 3px solid #007bff; padding-bottom: 15px; margin-bottom: 25px; }
+        .error { color: #dc3545; font-weight: bold; margin-top: 20px; padding: 20px; border: 2px solid #dc3545; background-color: #f8d7da; border-radius: 8px; }
+        .success-message { color: #28a745; margin-bottom: 20px; font-weight: bold; }
+        .lottery-result { margin-top: 30px; text-align: center; }
+        .info-line { margin-bottom: 15px; font-size: 1.2em; }
+        .info-line strong { color: #28a745; font-weight: 700; }
+        
+        .balls-group { margin: 20px 0; border: 1px solid #ccc; padding: 15px; border-radius: 8px; display: inline-block; }
+        .balls-group h3 { color: #495057; margin-top: 0; }
+        
+        .balls { display: flex; justify-content: center; flex-wrap: wrap; }
+        .ball { 
+            width: 45px; height: 45px; 
+            border-radius: 50%; 
+            background-color: #007bff; 
+            color: white; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            font-size: 1.3em; 
+            font-weight: bold; 
+            margin: 5px; 
+            border: 3px solid #0056b3; 
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
+        }
+        .second-area .ball { 
+            background-color: #dc3545; 
+            border: 3px solid #b21f2d; 
+   
+            font-size: 0.8em; 
+            line-height: 1.1;
+            width: 80px; height: 80px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>網站抓取環境測試</h1>
+
+        {% if error %}
+            <div class="error">
+                <h2>資料抓取失敗</h2>
+                <p><strong>錯誤信息：</strong> {{ error }}</p>
+                <p>這表示您的環境 (網路/防火牆/WebDriver) 與測試網站連接有問題。</p>
+            </div>
+        {% elif data %}
+            <div class="success-message">
+                 **連線成功！** 您的 Flask 和 Selenium 環境已成功抓取 Google 台灣網站。
+            </div>
+            <div class="lottery-result">
+                <p class="info-line"><strong>期數：</strong> {{ data.draw_period }}</p>
+                <p class="info-line"><strong>開獎日期：</strong> {{ data.draw_date }}</p>
+
+                <div class="balls-group">
+                    <h3>主要號碼 (測試數據)</h3>
+                    <div class="balls">
+                        {% for number in data.main_numbers %}
+                            <div class="ball">{{ number }}</div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="balls-group second-area">
+                    <h3>抓取到的網站標題 (第二區測試結果)</h3>
+                    <div class="balls">
+                        <div class="ball">{{ data.second_area }}</div>
+                    </div>
+                </div>
+            </div>
+        {% else %}
+            <div class="error">
+                <h2>應用程序運行中...</h2>
+                <p>但沒有獲取到數據，可能是初始化錯誤。</p>
+            </div>
+        {% endif %}
+    </div>
+</body>
+</html>
