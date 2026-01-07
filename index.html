@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SYSTEM BOOT SEQUENCE</title>
+    <link href="https://fonts.googleapis.com/css2?family=VT323&family=Courier+Prime:wght@400;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    
+    <style>
+        :root {
+            --bios-bg: #000;
+            --bios-text: #ccc;
+            --highlight: #fff;
+            --warn: #ffcc00;
+            --error: #ff3333;
+            --bsod-bg: #0078d7;
+            --paper-bg: #f4f1ea;
+            --ink: #2b2b2b;
+            --stamp: #c0392b;
+        }
+
+        body {
+            margin: 0;
+            height: 100vh;
+            overflow: hidden;
+            font-family: 'VT323', monospace;
+            background-color: var(--bios-bg);
+            color: var(--bios-text);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: none;
+        }
+
+        /* 1. BIOS 畫面 */
+        #bios-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            padding: 20px;
+            box-sizing: border-box;
+            font-size: 1.4rem;
+            line-height: 1.3;
+            text-align: left;
+            overflow-y: auto; /* 允許滾動 */
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end; /* 文字從下方往上推 */
+        }
+
+        /* 模擬游標閃爍 */
+        .cursor::after {
+            content: '_';
+            animation: blink 0.5s infinite;
+        }
+
+        /* 2. 藍屏 BSOD */
+        #bsod-screen {
+            display: none;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: var(--bsod-bg);
+            color: white;
+            padding: 10% 10%;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', sans-serif;
+            z-index: 200;
+            cursor: default;
+        }
+
+        .sad-face { font-size: 8rem; margin-bottom: 20px; }
+        .bsod-text { font-size: 1.4rem; line-height: 1.6; }
+
+        .manual-override {
+            margin-top: 40px;
+            font-family: 'Courier Prime', monospace;
+            border: 2px dashed white;
+            padding: 15px;
+            display: none;
+            animation: blink-fast 0.5s infinite;
+            background: rgba(0,0,0,0.1);
+            cursor: pointer;
+        }
+
+        /* 3. 紙張報告 */
+        #final-layer {
+            display: none;
+            z-index: 300;
+            perspective: 1000px;
+            width: 100%;
+            height: 100%;
+            display: flex; /* 這裡用 flex 居中，但預設要是 none，JS會改 */
+            justify-content: center;
+            align-items: center;
+            pointer-events: none; /* 讓點擊穿透 */
+        }
+
+        .paper-report {
+            background-color: var(--paper-bg);
+            width: 90%;
+            max-width: 550px;
+            padding: 40px;
+            color: var(--ink);
+            font-family: 'Courier Prime', monospace;
+            box-shadow: 1px 1px 0 rgba(0,0,0,0.1), 10px 10px 30px rgba(0,0,0,0.5);
+            transform: rotate(-3deg) scale(0.8);
+            opacity: 0;
+            pointer-events: auto;
+            position: relative;
+            /* 紙張紋理 */
+            background-image: linear-gradient(#e8e5de 1px, transparent 1px);
+            background-size: 100% 1.5em;
+        }
+
+        .paper-header {
+            border-bottom: 3px double #000;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .stamp {
+            position: absolute;
+            bottom: 20px; right: 20px;
+            border: 5px solid var(--stamp);
+            color: var(--stamp);
+            font-size: 2rem;
+            font-weight: bold;
+            padding: 5px 15px;
+            transform: rotate(-15deg);
+            opacity: 0;
+            mask-image: url("data:image/svg+xml;utf8,<svg width='200' height='100' xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.8'/></filter><rect width='100%25' height='100%25' fill='black'/><rect width='100%25' height='100%25' fill='white' filter='url(%23n)' opacity='0.4'/></svg>");
+        }
+
+        /* 動畫 Keyframes */
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+        @keyframes blink-fast { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        
+        @keyframes paper-enter {
+            0% { transform: scale(3) rotate(10deg); opacity: 0; }
+            100% { transform: scale(1) rotate(-3deg); opacity: 1; }
+        }
+        @keyframes stamp-slam {
+            0% { transform: scale(2) rotate(-15deg); opacity: 0; }
+            80% { transform: scale(0.9) rotate(-15deg); opacity: 1; }
+            100% { transform: scale(1) rotate(-15deg); opacity: 0.8; }
+        }
+
+        /* 手機適配 */
+        @media (max-width: 600px) {
+            #bios-screen { font-size: 1rem; }
+            .sad-face { font-size: 5rem; }
+            .paper-report { padding: 20px; width: 85%; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="bios-screen">
+        <div id="bios-content"></div>
+    </div>
+
+    <div id="bsod-screen">
+        <div class="sad-face">:(</div>
+        <div class="bsod-text">
+            您的電腦發生問題，因此必須重新啟動。<br>
+            我們正在收集錯誤資訊，接著我們會為您重新啟動。<br>
+            <br>
+            完成 <span id="percent-counter">0%</span>
+            <br><br>
+            <div style="font-size: 0.9rem; margin-top: 30px; opacity: 0.8;">
+                終止代碼：STRUCTURAL_SWAG_OVERLOAD (結構帥氣過載)<br>
+                失敗的項目：Birthday_Boy.sys
+            </div>
+        </div>
+
+        <div class="manual-override" id="action-prompt">
+            請按 [空白鍵] 或 [點擊螢幕] 強制修復
+        </div>
+    </div>
+
+    <div id="final-layer" style="display:none;">
+        <div class="paper-report">
+            <div class="paper-header">
+                <div style="font-size:1.5rem; font-weight:bold;">結構鑑定報告書</div>
+                <div style="text-align:right; font-size:0.8rem;">
+                    編號: 2026-BDAY<br>等級: SSS+
+                </div>
+            </div>
+
+            <p><strong>鑑定對象：</strong> [ 紀彥辰 ]</p>
+            <p><strong>所屬單位：</strong> 土木工程學系</p>
+            <hr style="border:0; border-top:1px dashed #555; margin:15px 0;">
+            
+            <p><strong>檢測結果說明：</strong></p>
+            <p>1. 該員之「年齡參數」今日發生 +1 變化。<br>
+               2. 經 AutoCAD 掃描，其幸運度導致顯卡過熱。<br>
+               3. 結構強度判定：<strong>堅不可摧</strong>。</p>
+            <br>
+            <p><strong>工程師備註：</strong></p>
+            <p>兄弟，生日快樂！<br>
+            希望你未來的地基打得比誰都穩，<br>
+            蓋出來的人生比 101 還要高！</p>
+
+            <div class="stamp">審核通過</div>
+        </div>
+    </div>
+
+    <script>
+        const biosContent = document.getElementById('bios-content');
+        const biosScreen = document.getElementById('bios-screen');
+        const bsodScreen = document.getElementById('bsod-screen');
+        const percentCounter = document.getElementById('percent-counter');
+        const promptDiv = document.getElementById('action-prompt');
+        const finalLayer = document.getElementById('final-layer');
+        const paperReport = document.querySelector('.paper-report');
+        const stamp = document.querySelector('.stamp');
+
+        // 超長篇開機文字 (包含土木梗)
+        const bootText = [
+            "AMIBIOS(C) 2006 American Megatrends, Inc.",
+            "BIOS Date: 01/07/26 10:48:00 Ver: 08.00.15",
+            "CPU: Neural Quantum Processor @ 9.9GHz",
+            "Checking NVRAM...",
+            "Initializing USB Controllers .. Done.",
+            "64GB System RAM Passed",
+            "Shadow RAM Enabled",
+            "",
+            "Loading Windows Boot Manager...",
+            "Starting Civil Engineering Workstation v4.2...",
+            "...",
+            "> mount -t structural_data /dev/birthday",
+            "> Loading AutoCAD Core Modules... [OK]",
+            "> Loading SAP2000 Analysis Engine... [OK]",
+            "> Loading Revit BIM Models... [OK]",
+            "",
+            "正在連線至土木系中央資料庫...",
+            "使用者驗證: [ 紀彥辰 ]",
+            "權限: 超級管理員 (Admin)",
+            "",
+            "--- 開始執行結構年度檢測 ---",
+            "載入歷史數據 (History Data)...... 完成",
+            "檢查熬夜耐受力 (All-Nighter Capacity)... 100%",
+            "檢查肝指數 (Liver Status)... 穩定",
+            "計算微積分能力值 (Calculus Skill)... 正常",
+            "",
+            "警告: 偵測到今日日期異常!",
+            "事件: BIRTHDAY_EVENT_TRIGGERED",
+            "正在嘗試升級使用者等級 (Level Up)...",
+            "...",
+            "執行壓力測試 (Stress Test)...",
+            "施加載重: 1000kN... 結構穩定",
+            "施加載重: 5000kN... 結構穩定",
+            "施加載重: 9999kN... 結構穩定",
+            "",
+            "警告: 魅力值數據溢位 (Integer Overflow)",
+            "警告: 幸運指數超過 GPU 渲染上限",
+            "錯誤: 無法計算過量的 Coolness",
+            "系統溫度急劇上升... 90°C... 105°C...",
+            "緊急冷卻失敗!",
+            "CRITICAL PROCESS DIED",
+            "SYSTEM HALTED"
+        ];
+
+        // 1. 執行開機動畫
+        async function runBios() {
+            for (let i = 0; i < bootText.length; i++) {
+                const line = bootText[i];
+                const div = document.createElement('div');
+                div.innerHTML = line === "" ? "&nbsp;" : line;
+                
+                // 加點顏色
+                if(line.includes("警告")) div.style.color = "var(--warn)";
+                if(line.includes("錯誤") || line.includes("CRITICAL") || line.includes("HALTED")) div.style.color = "var(--error)";
+                if(line.includes("Done") || line.includes("OK") || line.includes("穩定")) div.style.color = "#0f0";
+
+                biosContent.appendChild(div);
+                
+                // 自動捲動到底部
+                biosScreen.scrollTop = biosScreen.scrollHeight;
+
+                // 根據內容決定打字速度
+                let delay = 50; // 預設極快
+                if (line.includes("Loading")) delay = 400; // 載入慢一點
+                if (line.includes("正在")) delay = 600; // 中文思考慢一點
+                if (line.includes("...")) delay = 800;
+                if (line.includes("SYSTEM HALTED")) delay = 2000; // 最後一行停久一點
+
+                await new Promise(r => setTimeout(r, delay));
+            }
+            
+            // 進入藍屏
+            triggerBSOD();
+        }
+
+        // 2. 藍屏邏輯
+        function triggerBSOD() {
+            biosScreen.style.display = 'none';
+            bsodScreen.style.display = 'block';
+            document.body.style.backgroundColor = 'var(--bsod-bg)';
+            document.body.style.cursor = 'default';
+
+            // 跑進度條 (卡在 99%)
+            let p = 0;
+            let interval = setInterval(() => {
+                p++;
+                percentCounter.innerText = p + "%";
+                if(p >= 99) {
+                    clearInterval(interval);
+                    showPrompt();
+                }
+            }, 40);
+        }
+
+        // 3. 顯示按鍵提示
+        function showPrompt() {
+            promptDiv.style.display = 'block';
+            window.addEventListener('keydown', handleInput);
+            window.addEventListener('touchstart', handleInput);
+        }
+
+        function handleInput(e) {
+            if(e.code === 'Space' || e.type === 'touchstart') {
+                window.removeEventListener('keydown', handleInput);
+                window.removeEventListener('touchstart', handleInput);
+                revealPaper();
+            }
+        }
+
+        // 4. 顯示紙張與特效
+        function revealPaper() {
+            bsodScreen.style.display = 'none';
+            document.body.style.backgroundColor = '#222'; // 桌子顏色
+            document.body.style.cursor = 'auto';
+            
+            finalLayer.style.display = 'flex'; // 改為 flex 讓他置中
+            paperReport.style.animation = 'paper-enter 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards';
+
+            // 延遲蓋章
+            setTimeout(() => {
+                stamp.style.opacity = '1';
+                stamp.style.animation = 'stamp-slam 0.3s ease-out forwards';
+                // 震動
+                if(navigator.vibrate) navigator.vibrate(50);
+            }, 800);
+
+            // 放禮炮
+            setTimeout(fireConfetti, 600);
+        }
+
+        function fireConfetti() {
+            var duration = 2000;
+            var end = Date.now() + duration;
+            // 紙屑顏色：灰、白、印章紅
+            var colors = ['#d0d0d0', '#ffffff', '#c0392b']; 
+
+            (function frame() {
+                confetti({
+                    particleCount: 5,
+                    angle: 60,
+                    spread: 55,
+                    origin: { x: 0 },
+                    colors: colors,
+                    shapes: ['square'],
+                    ticks: 200
+                });
+                confetti({
+                    particleCount: 5,
+                    angle: 120,
+                    spread: 55,
+                    origin: { x: 1 },
+                    colors: colors,
+                    shapes: ['square'],
+                    ticks: 200
+                });
+
+                if (Date.now() < end) {
+                    requestAnimationFrame(frame);
+                }
+            }());
+        }
+
+        // 啟動！
+        window.onload = runBios;
+
+    </script>
+</body>
+</html>
