@@ -131,54 +131,69 @@
             this.stdB64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
             this.toCustomMap = {};
             this.toStdMap = {};
-            for (let i = 0; i < 64; i++) {
-                this.toCustomMap[this.stdB64[i]] = this.symbols[i];
-                this.toStdMap[this.symbols[i]] = this.stdB64[i];
-            }
+            const symArray = [...this.symbols];
+            [...this.stdB64].forEach((char, i) => {
+                this.toCustomMap[char] = symArray[i];
+                this.toStdMap[symArray[i]] = char;
+            });
         }
 
         encrypt(text) {
             try {
-                let b64 = btoa(unescape(encodeURIComponent(text))).replace(/=/g, '');
-                return b64.split('').map(char => this.toCustomMap[char] || char).join('');
-            } catch (e) { return "ERROR"; }
+                const utf8Bytes = new TextEncoder().encode(text);
+                let binary = "";
+                utf8Bytes.forEach(b => binary += String.fromCharCode(b));
+                const b64 = btoa(binary).replace(/=/g, '');
+                return [...b64].map(char => this.toCustomMap[char] || char).join('');
+            } catch (e) { return "Encryption Error"; }
         }
 
-        decrypt(encodedText) {
+        decrypt(text) {
             try {
-                let stdB64 = encodedText.split('').map(char => this.toStdMap[char] || char).join('');
+                let stdB64 = [...text].map(char => this.toStdMap[char] || "").join('');
                 while (stdB64.length % 4 !== 0) { stdB64 += '='; }
-                return decodeURIComponent(escape(atob(stdB64)));
-            } catch (e) { return "INVALID SYMBOLS"; }
+                const binary = atob(stdB64);
+                const bytes = new Uint8Array(binary.length);
+                for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+                return new TextDecoder().decode(bytes);
+            } catch (e) { return null; }
         }
 
-        isEncrypted(text) {
+        isAllSymbols(text) {
             if (!text) return false;
-            const chars = [...text];
-            const matchCount = chars.filter(c => this.symbols.includes(c)).length;
-            return matchCount > 0 && matchCount >= text.length * 0.5;
+            const symArray = [...this.symbols];
+            return [...text].every(char => symArray.includes(char));
         }
     }
 
     const cipher = new UltraEncryptor();
-    const inputArea = document.getElementById('userInput');
-    const outputArea = document.getElementById('resultOutput');
-    const modeLabel = document.getElementById('modeLabel');
+    const input = document.getElementById('userInput');
+    const output = document.getElementById('resultOutput');
+    const mode = document.getElementById('modeLabel');
 
-    inputArea.addEventListener('input', () => {
-        const val = inputArea.value.trim();
+    input.addEventListener('input', () => {
+        const val = input.value.trim();
         if (!val) {
-            outputArea.value = "";
-            modeLabel.innerText = "SYSTEM READY";
+            output.value = "";
+            mode.innerText = "READY";
             return;
         }
 
-        if (cipher.isEncrypted(val)) {
-            modeLabel.innerText = "DECRYPTING MODE";
-            outputArea.value = cipher.decrypt(val);
+        if (cipher.isAllSymbols(val)) {
+            const decoded = cipher.decrypt(val);
+            if (decoded) {
+                mode.innerText = "解密結果:";
+                output.value = decoded;
+                output.style.color = "#00ff44";
+            } else {
+                mode.innerText = "加密結果:";
+                output.value = cipher.encrypt(val);
+                output.style.color = "var(--accent)";
+            }
         } else {
-            modeLabel.innerText = "ENCRYPTING MODE";
-            outputArea.value = cipher.encrypt(val);
+            mode.innerText = "加密結果:";
+            output.value = cipher.encrypt(val);
+            output.style.color = "var(--accent)";
         }
     });
 </script>
